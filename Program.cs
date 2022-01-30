@@ -39,8 +39,14 @@ TimeSpan maxGarminStravaTimeDifference = new( 0, 5, 0 );
 Thread.CurrentThread.CurrentCulture = Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
 
 Settings settings = new ConfigurationBuilder().AddJsonFile( "myappsettings.json" ).Build().GetRequiredSection( "Settings" ).Get<Settings>();
+if ( settings.DateAfter == DateTime.MinValue || settings.DateBefore == DateTime.MinValue )
+{
+  DateTime dateTimeNow = DateTime.Now;
+  settings.DateAfter = new( dateTimeNow.Year, dateTimeNow.Month, dateTimeNow.Day );
+  settings.DateBefore = settings.DateAfter.AddDays( 1 );
+}
 
-WriteLine( $"Time interval = {settings.DateTimeAfter} - {settings.DateTimeBefore}" );
+WriteLine( $"Time interval = {settings.DateAfter.ToString("yyyy-MM-dd")} - {settings.DateBefore.ToString( "yyyy-MM-dd" )}" );
 
 // ----------------------------- Authorize to Strava -----------------------------
 using HttpListener httpListener = new();
@@ -114,8 +120,8 @@ List<dynamic> stravaActivities = new();
 for ( int stravaActivitiesPage = 1; ; stravaActivitiesPage++ )
 {
   string getActivitiesUrl = "/api/v3/athlete/activities?" +
-    $"before={settings.DateTimeBefore.DateTimeToUnixTimestamp()}&" +
-    $"after={settings.DateTimeAfter.DateTimeToUnixTimestamp()}&" +
+    $"before={settings.DateBefore.DateTimeToUnixTimestamp()}&" +
+    $"after={settings.DateAfter.DateTimeToUnixTimestamp()}&" +
     $"page={stravaActivitiesPage}&" +
     "per_page=200&" +
     $"access_token={stravaAccessToken}";
@@ -145,7 +151,7 @@ if ( stravaActivities.Count == 0 )
 
 // ----------------------------- Read Garmin activities -----------------------------
 WriteLine( "Reading Garmin activities, please wait..." );
-GarminActivity[] garminActivities = await client.GetActivitiesByDate( settings.DateTimeAfter, settings.DateTimeBefore.AddDays( -1 ), null );
+GarminActivity[] garminActivities = await client.GetActivitiesByDate( settings.DateAfter, settings.DateBefore.AddDays( -1 ), null );
 if ( garminActivities.Length == 0 )
 {
   Write( $"No Garmin activities" );
@@ -212,15 +218,42 @@ foreach ( GarminActivity garminActivity in garminActivities )
 
 internal class Settings
 {
+  /// <summary>
+  /// Strava Client ID obtained by registering your API application at https://www.strava.com/settings/api
+  /// </summary>
   public int StravaClientId { get; set; }
+  /// <summary>
+  /// Strava Client Secret obtained by registering your API application at https://www.strava.com/settings/api
+  /// </summary>
   public string StravaSecret { get; set; }
+  /// <summary>
+  /// Garmin account login email
+  /// </summary>
   public string GarminLogin { get; set; }
+  /// <summary>
+  /// Garmin account password
+  /// </summary>
   public string GarminPassword { get; set; }
+  /// <summary>
+  /// true to update Strava activity name when the Garmin activity name is different
+  /// </summary>
   public bool UpdateName { get; set; }
+  /// <summary>
+  /// true to update Strava activity description when the Garmin activity description is not empty and different
+  /// </summary>
   public bool UpdateDescription { get; set; }
+  /// <summary>
+  /// true to update Strava athlete weight from Garming
+  /// </summary>
   public bool UpdateWeight { get; set; }
-  public DateTime DateTimeAfter { get; set; }
-  public DateTime DateTimeBefore { get; set; }
+  /// <summary>
+  /// Update activities that have taken place after a certain date.
+  /// If this or the following property is missing in the configuration file today is used.
+  /// </summary>
+  public DateTime DateAfter { get; set; }
+  /// Update activities that have taken place before a certain date.
+  /// If this or the previous property is missing in the configuration file tomorrow is used.
+  public DateTime DateBefore { get; set; }
 }
 
 internal static class Extensions

@@ -14,7 +14,7 @@ The single source file **Garmin2FoodFinalSync** Microsoft Windows console applic
 | Application Description | *leave empty* |
 | Authorization Callback Domain | localhost |
 
-Press [Create](https://developers.strava.com/images/getting-started-2.png) to register the application and then note the Client ID and Client Secret. In the next step, they will be inserted into the configuration file.
+Press [Create](https://developers.strava.com/images/getting-started-1.png) to register the application and then note the Client ID and Client Secret. In the next step, they will be inserted into the configuration file.
 
 **2.** The application is configured by [appsettings.json](appsettings.json) file. Please enter your values:
 

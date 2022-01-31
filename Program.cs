@@ -38,7 +38,7 @@ TimeSpan maxGarminStravaTimeDifference = new( 0, 5, 0 );
 
 Thread.CurrentThread.CurrentCulture = Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
 
-Settings settings = new ConfigurationBuilder().AddJsonFile( "myappsettings.json" ).Build().GetRequiredSection( "Settings" ).Get<Settings>();
+Settings settings = new ConfigurationBuilder().AddJsonFile( "appsettings.json" ).Build().GetRequiredSection( "Settings" ).Get<Settings>();
 if ( settings.DateAfter == DateTime.MinValue || settings.DateBefore == DateTime.MinValue )
 {
   DateTime dateTimeNow = DateTime.Now;

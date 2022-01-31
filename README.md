@@ -1,9 +1,9 @@
 # Garmin2StravaFinalSync
-When the Strava is connected to a Garmin, new activities in Garmin are automatically uploaded to the Strava. Unfortunately, the Strava does not upload the name and description of the Garmin activity.
+When the Strava account is connected to a Garmin account, new Garmin activities are automatically uploaded to the Strava. Unfortunately, the Strava does not upload the name and description of the Garmin activity.
 
-This single source file **Garmin2FoodFinalSync** Microsoft Windows console application updates the name and description from Garmin to Strava for all matching activities between the dates specified.
+The single source file **Garmin2FoodFinalSync** Microsoft Windows console application updates the name and description from Garmin to Strava for all matching activities between the dates specified.
 
-Before you start you have to register your [Strava API Application](https://www.strava.com/settings/api) to obtain Strava Client ID and Strava Client Secret. This is a one time, manual step. Enter the following fields when registering the application:
+1. Before you start you have to register your [Strava API Application](https://www.strava.com/settings/api) to obtain Strava Client ID and Strava Client Secret. This is a one time, manual step. Enter the following fields when registering the application:
 
 | Field | Value |
 | --- | ----------- |
@@ -16,7 +16,7 @@ Before you start you have to register your [Strava API Application](https://www.
 
 Press [Create](https://developers.strava.com/images/getting-started-2.png) to register the application and then note down Client ID and Client Secret. They will be entered into configuration file in the next step.
 
-The application is configured by [appsettings.json](appsettings.json) file. Please enter your values:
+2. The application is configured by [appsettings.json](appsettings.json) file. Please enter your values:
 
 | Property | Value |
 | --- | ----------- |
@@ -30,6 +30,7 @@ The application is configured by [appsettings.json](appsettings.json) file. Plea
 | DateAfter | Update activities that have taken place after a certain date. Example "2022-01-29". If this or the following property is missing in the configuration file today is used. |
 | DateBefore | Update activities that have taken place before a certain date. Example "2022-01-30". If this or the previous property is missing in the configuration file tomorrow is used. |
 
-When the application starts it first reads the configuration file and then launches a default [Strava authentication page](https://developers.strava.com/images/getting-started-4.png) using your default Internet browser. Press Authorize to allow Garmin2FoodFinalSync synchronizing.
+3. When the application starts it first reads the configuration file and then launches a default [Strava authentication page](https://developers.strava.com/images/getting-started-4.png) using your default Internet browser. Press Authorize to allow Garmin2FoodFinalSync synchronizing.
 
-Please note that Strava limits API usage to a maximum of 100 requests every 15 minutes, with up to 1,000 requests per day.
+
+> :memo: Please note that Strava limits API usage to a maximum of 100 requests every 15 minutes, with up to 1,000 requests per day.

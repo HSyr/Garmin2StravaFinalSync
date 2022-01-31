@@ -7,10 +7,10 @@ The single source file **Garmin2FoodFinalSync** Microsoft Windows console applic
 
 | Field | Value |
 | --- | ----------- |
-| Application Name | *enter a name of your choice, such as YourNameStravaApiApp* |
+| Application Name | *enter a name of your choice, such as* YourNameStravaApiApp |
 | Category | Other |
 | Club | *leave empty* |
-| Website | *enter a valid URL, example http://myhomepage.com* |
+| Website | *enter a valid URL, example* http://myhomepage.com |
 | Application Description | *leave empty* |
 | Authorization Callback Domain | localhost |
 

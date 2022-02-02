@@ -38,6 +38,7 @@ TimeSpan maxGarminStravaTimeDifference = new( 0, 5, 0 );
 
 Thread.CurrentThread.CurrentCulture = Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
 
+// ----------------------------- Read configuration -----------------------------
 Settings settings = new ConfigurationBuilder().AddJsonFile( "appsettings.json" ).Build().GetRequiredSection( "Settings" ).Get<Settings>();
 if ( settings.DateAfter == DateTime.MinValue || settings.DateBefore == DateTime.MinValue )
 {
@@ -45,8 +46,13 @@ if ( settings.DateAfter == DateTime.MinValue || settings.DateBefore == DateTime.
   settings.DateAfter = new( dateTimeNow.Year, dateTimeNow.Month, dateTimeNow.Day );
   settings.DateBefore = settings.DateAfter.AddDays( 1 );
 }
+else
+{
+  settings.DateAfter = new( settings.DateAfter.Year, settings.DateAfter.Month, settings.DateAfter.Day );
+  settings.DateBefore = new( settings.DateBefore.Year, settings.DateBefore.Month, settings.DateBefore.Day );
+}
 
-WriteLine( $"Time interval = {settings.DateAfter.ToString("yyyy-MM-dd")} - {settings.DateBefore.ToString( "yyyy-MM-dd" )}" );
+WriteLine( $"Time interval = {settings.DateAfter.ToString( "yyyy-MM-dd" )} - {settings.DateBefore.ToString( "yyyy-MM-dd" )}" );
 
 // ----------------------------- Authorize to Strava -----------------------------
 using HttpListener httpListener = new();
@@ -158,7 +164,7 @@ if ( garminActivities.Length == 0 )
   return;
 }
 
-// ----------------------------- Synchronize Name/Description from Garmin to Strava -----------------------------
+// ----------------------------- Synchronize Name and/or Description from Garmin to Strava -----------------------------
 foreach ( GarminActivity garminActivity in garminActivities )
 {
   WriteLine(
@@ -243,7 +249,7 @@ internal class Settings
   /// </summary>
   public bool UpdateDescription { get; set; }
   /// <summary>
-  /// true to update Strava athlete weight from Garming
+  /// true to update Strava athlete weight from Garmin
   /// </summary>
   public bool UpdateWeight { get; set; }
   /// <summary>

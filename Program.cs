@@ -52,7 +52,7 @@ else
   settings.DateBefore = new( settings.DateBefore.Year, settings.DateBefore.Month, settings.DateBefore.Day );
 }
 
-WriteLine( $"Time interval = {settings.DateAfter.ToString( "yyyy-MM-dd" )} - {settings.DateBefore.ToString( "yyyy-MM-dd" )}" );
+WriteLine( $"Time interval = {settings.DateAfter:yyyy-MM-dd} - {settings.DateBefore:yyyy-MM-dd}" );
 
 // ----------------------------- Authorize to Strava -----------------------------
 using HttpListener httpListener = new();
@@ -75,151 +75,182 @@ WriteLine( "Waiting for Strava authentication..." );
 HttpListenerContext context = httpListener.GetContext();
 string stravaCode = context.Request.QueryString["code"];
 if ( stravaCode == null )
-  throw new( "Strava 'code' missing in the http redirect query." );
-WriteLine( $"Strava code = {stravaCode}" );
+  throw new( "! Strava 'code' missing in the http redirect query." );
 
 HttpListenerResponse response = context.Response;
 byte[] buffer = Encoding.UTF8.GetBytes( "<html><body><h1>Authorization successful!</h1></body></html>" );
 response.ContentLength64 = buffer.Length;
 response.OutputStream.Write( buffer, 0, buffer.Length );
 response.OutputStream.Close();
+WriteLine( $"Strava code = {stravaCode}" );
 httpListener.Stop();
 
-// ----------------------------- Get Strava access token -----------------------------
-using HttpClient stravaHttpClient = new()
+string[] stravaApiUsages = null, stravaApiLimits = null;
+try
 {
-  BaseAddress = new Uri( "https://www.strava.com" )
-};
-
-string authUrl = "/oauth/token?" +
-  $"client_id={settings.StravaClientId}&" +
-  $"client_secret={settings.StravaSecret}&" +
-  $"code={stravaCode}&" +
-  "grant_type=authorization_code";
-HttpResponseMessage getTokens = await stravaHttpClient.PostAsync( authUrl, null );
-string stravaAccessToken = ( await getTokens.Content.ReadAsStringAsync() ).JsonDeserialize().access_token;
-WriteLine( $"Strava access token = {stravaAccessToken}" );
-
-// ----------------------------- Connect to Garmin -----------------------------
-BasicAuthParameters authParameters = new( settings.GarminLogin, settings.GarminPassword );
-using HttpClient httpClient = new();
-GarminConnectClient client = new( new GarminConnectContext( httpClient, authParameters ) );
-
-// ----------------------------- Update weight -----------------------------
-if ( settings.UpdateWeight )
-{
-  GarminUserSettings garminUserSettings = await client.GetUserSettings();
-  HttpResponseMessage resultPut = await stravaHttpClient.PutAsync(
-    $"/api/v3/athlete?" +
-    $"weight={garminUserSettings.UserData.Weight / 1000}&" +
-    $"access_token={stravaAccessToken}", null );
-
-  if ( resultPut.StatusCode != HttpStatusCode.OK )
-    throw new( "! Error updating weight {resultPut.StatusCode}" );
-
-  WriteLine( $"Athlete weight updated to {( garminUserSettings.UserData.Weight / 1000 ):0.0}" );
-}
-
-// ----------------------------- Read Strava activities -----------------------------
-WriteLine( "Reading Strava activities, please wait..." );
-List<dynamic> stravaActivities = new();
-for ( int stravaActivitiesPage = 1; ; stravaActivitiesPage++ )
-{
-  string getActivitiesUrl = "/api/v3/athlete/activities?" +
-    $"before={settings.DateBefore.DateTimeToUnixTimestamp()}&" +
-    $"after={settings.DateAfter.DateTimeToUnixTimestamp()}&" +
-    $"page={stravaActivitiesPage}&" +
-    "per_page=200&" +
-    $"access_token={stravaAccessToken}";
-
-  HttpResponseMessage getResult = await stravaHttpClient.GetAsync( getActivitiesUrl );
-  if ( getResult.StatusCode != HttpStatusCode.OK )
-    throw new( $"Error {getResult.StatusCode} when reading Strava activities" );
-
-  List<ExpandoObject> newActivities = ( await getResult.Content.ReadAsStringAsync() ).JsonDeserializeList();
-  if ( newActivities.Count == 0 )
-    break;
-
-  foreach ( dynamic stravaActivity in newActivities )
-    WriteLine(
-      $"\t{stravaActivity.type}\t" +
-      $"{stravaActivity.start_date_local}\t" +
-      $"{stravaActivity.name}" );
-
-  stravaActivities.AddRange( newActivities );
-}
-
-if ( stravaActivities.Count == 0 )
-{
-  WriteLine( $"No Strava activities" );
-  return;
-}
-
-// ----------------------------- Read Garmin activities -----------------------------
-WriteLine( "Reading Garmin activities, please wait..." );
-GarminActivity[] garminActivities = await client.GetActivitiesByDate( settings.DateAfter, settings.DateBefore.AddDays( -1 ), null );
-if ( garminActivities.Length == 0 )
-{
-  Write( $"No Garmin activities" );
-  return;
-}
-
-// ----------------------------- Synchronize Name and/or Description from Garmin to Strava -----------------------------
-foreach ( GarminActivity garminActivity in garminActivities )
-{
-  WriteLine(
-    $"\t{garminActivity.ActivityType.TypeKey}\t" +
-    $"{garminActivity.StartTimeLocal}\t" +
-    $"{garminActivity.ActivityName}" );
-
-  var foundGarminInStrava =
-    from dynamic stravaActivity
-    in stravaActivities
-    where ( garminActivity.StartTimeGmt - stravaActivity.start_date ).Duration() < maxGarminStravaTimeDifference ||
-          ( garminActivity.StartTimeLocal - stravaActivity.start_date_local ).Duration() < maxGarminStravaTimeDifference
-    select stravaActivity;
-
-  if ( foundGarminInStrava.Count() != 1 )
-    WriteLine( $"\t! Garmin activity not found in Strava!" );
-  else
+  // ----------------------------- Get Strava access token -----------------------------
+  using HttpClient stravaHttpClient = new()
   {
-    dynamic stravaActivity = foundGarminInStrava.First();
-    string stravaActivityNameTrim = stravaActivity.name.Trim();
-    // Note: other character replacements might be needed
-    string garminActivityNameModified = garminActivity.ActivityName.Trim().Replace( "#", "" ).Replace( '+', ' ' );
+    BaseAddress = new Uri( "https://www.strava.com" )
+  };
 
-    string updateName = "";
-    if ( settings.UpdateName && garminActivityNameModified != stravaActivityNameTrim )
-      updateName = $"&name={garminActivityNameModified}";
+  string authUrl = "/oauth/token?" +
+    $"client_id={settings.StravaClientId}&" +
+    $"client_secret={settings.StravaSecret}&" +
+    $"code={stravaCode}&" +
+    "grant_type=authorization_code";
+  HttpResponseMessage stravaResponse = await stravaHttpClient.PostAsync( authUrl, null );
+  string stravaAccessToken = ( await stravaResponse.Content.ReadAsStringAsync() ).JsonDeserialize().access_token;
+  WriteLine( $"Strava access token = {stravaAccessToken}" );
 
-    string updateDescription = "";
-    if ( settings.UpdateDescription && !string.IsNullOrEmpty( garminActivity.Description ) )
+  // ----------------------------- Connect to Garmin -----------------------------
+  BasicAuthParameters authParameters = new( settings.GarminLogin, settings.GarminPassword );
+  using HttpClient httpClient = new();
+  GarminConnectClient client = new( new GarminConnectContext( httpClient, authParameters ) );
+
+  // ----------------------------- Update weight -----------------------------
+  if ( settings.UpdateWeight )
+  {
+    GarminUserSettings garminUserSettings = await client.GetUserSettings();
+    stravaResponse = await stravaHttpClient.PutAsync(
+      $"/api/v3/athlete?" +
+      $"weight={garminUserSettings.UserData.Weight / 1000}&" +
+      $"access_token={stravaAccessToken}", null );
+
+    if ( stravaResponse.StatusCode != HttpStatusCode.OK )
+      throw new( "! Error updating weight {resultPut.StatusCode}." );
+
+    WriteLine( $"Athlete weight updated to {( garminUserSettings.UserData.Weight / 1000 ):0.0}" );
+    checkStravaApiLimits();
+  }
+
+  // ----------------------------- Read Strava activities -----------------------------
+  WriteLine( "Reading Strava activities, please wait..." );
+  List<dynamic> stravaActivities = new();
+  for ( int stravaActivitiesPage = 1; ; stravaActivitiesPage++ )
+  {
+    string getActivitiesUrl = "/api/v3/athlete/activities?" +
+      $"before={settings.DateBefore.DateTimeToUnixTimestamp()}&" +
+      $"after={settings.DateAfter.DateTimeToUnixTimestamp()}&" +
+      $"page={stravaActivitiesPage}&" +
+      "per_page=200&" +
+      $"access_token={stravaAccessToken}";
+
+    stravaResponse = await stravaHttpClient.GetAsync( getActivitiesUrl );
+    if ( stravaResponse.StatusCode != HttpStatusCode.OK )
+      throw new( $"! Error {stravaResponse.StatusCode} when reading Strava activities." );
+
+    checkStravaApiLimits();
+
+    List<ExpandoObject> newActivities = ( await stravaResponse.Content.ReadAsStringAsync() ).JsonDeserializeList();
+    if ( newActivities.Count == 0 )
+      break;
+
+    foreach ( dynamic stravaActivity in newActivities )
+      WriteLine(
+        $"\t{stravaActivity.type}\t" +
+        $"{stravaActivity.start_date_local}\t" +
+        $"{stravaActivity.name}" );
+
+    stravaActivities.AddRange( newActivities );
+  }
+
+  if ( stravaActivities.Count == 0 )
+  {
+    WriteLine( $"No Strava activities" );
+    return;
+  }
+
+  // ----------------------------- Read Garmin activities -----------------------------
+  WriteLine( "Reading Garmin activities, please wait..." );
+  GarminActivity[] garminActivities = await client.GetActivitiesByDate( settings.DateAfter, settings.DateBefore.AddDays( -1 ), null );
+  if ( garminActivities.Length == 0 )
+  {
+    Write( $"No Garmin activities" );
+    return;
+  }
+
+  // ----------------------------- Synchronize Name and/or Description from Garmin to Strava -----------------------------
+  foreach ( GarminActivity garminActivity in garminActivities )
+  {
+    WriteLine(
+      $"\t{garminActivity.ActivityType.TypeKey}\t" +
+      $"{garminActivity.StartTimeLocal}\t" +
+      $"{garminActivity.ActivityName}" );
+
+    var foundGarminInStrava =
+      from dynamic stravaActivity
+      in stravaActivities
+      where ( garminActivity.StartTimeGmt - stravaActivity.start_date ).Duration() < maxGarminStravaTimeDifference ||
+            ( garminActivity.StartTimeLocal - stravaActivity.start_date_local ).Duration() < maxGarminStravaTimeDifference
+      select stravaActivity;
+
+    if ( foundGarminInStrava.Count() != 1 )
+      WriteLine( $"\t! Garmin activity not found in Strava!" );
+    else
     {
-      string getActivitysUrl = $"api/v3/activities/{stravaActivity.id}?" +
-        $"access_token={stravaAccessToken}";
+      dynamic stravaActivity = foundGarminInStrava.First();
+      string stravaActivityNameTrim = stravaActivity.name.Trim();
+      // Note: other character replacements might be needed
+      string garminActivityNameModified = garminActivity.ActivityName.Trim().Replace( "#", "" ).Replace( '+', ' ' );
 
-      HttpResponseMessage getResult = await stravaHttpClient.GetAsync( getActivitysUrl );
-      if ( getResult.StatusCode != HttpStatusCode.OK )
-        throw new( $"Error {getResult.StatusCode} when reading Strava activity" );
+      string updateName = "";
+      if ( settings.UpdateName && garminActivityNameModified != stravaActivityNameTrim )
+        updateName = $"&name={garminActivityNameModified}";
 
-      dynamic stravaActivityDetail = ( await getResult.Content.ReadAsStringAsync() ).JsonDeserialize();
-      if ( string.Compare( garminActivity.Description, stravaActivityDetail.description ) != 0 )
-        updateDescription = $"&description={garminActivity.Description}";
-    }
+      string updateDescription = "";
+      if ( settings.UpdateDescription && !string.IsNullOrEmpty( garminActivity.Description ) )
+      {
+        string getActivitysUrl = $"api/v3/activities/{stravaActivity.id}?" +
+          $"access_token={stravaAccessToken}";
 
-    if ( updateName != "" || updateDescription != "" )
-    {
-      HttpResponseMessage resultPut = await stravaHttpClient.PutAsync(
-        $"/api/v3/activities/{stravaActivity.id}?" +
-        $"&access_token={stravaAccessToken}" +
-        $"{updateName}" +
-        $"{updateDescription}", null );
+        stravaResponse = await stravaHttpClient.GetAsync( getActivitysUrl );
+        if ( stravaResponse.StatusCode != HttpStatusCode.OK )
+          throw new( $"! Error {stravaResponse.StatusCode} when reading Strava activity." );
 
-      WriteLine( resultPut.StatusCode != HttpStatusCode.OK ?
-        $"\t! Error updating Strava activity {resultPut.StatusCode}!" :
-        "\tStrava activity updated OK" );
+        checkStravaApiLimits();
+
+        dynamic stravaActivityDetail = ( await stravaResponse.Content.ReadAsStringAsync() ).JsonDeserialize();
+        if ( string.Compare( garminActivity.Description, stravaActivityDetail.description ) != 0 )
+          updateDescription = $"&description={garminActivity.Description}";
+      }
+
+      if ( updateName != "" || updateDescription != "" )
+      {
+        stravaResponse = await stravaHttpClient.PutAsync(
+         $"/api/v3/activities/{stravaActivity.id}?" +
+         $"&access_token={stravaAccessToken}" +
+         $"{updateName}" +
+         $"{updateDescription}", null );
+
+        WriteLine( stravaResponse.StatusCode != HttpStatusCode.OK ?
+          $"\t! Error updating Strava activity {stravaResponse.StatusCode}!" :
+          "\tStrava activity updated OK" );
+
+        checkStravaApiLimits();
+      }
     }
   }
+
+  void checkStravaApiLimits ()
+  {
+    if ( stravaResponse.Headers.TryGetValues( "X-Ratelimit-Usage", out var headersUsage ) &&
+         stravaResponse.Headers.TryGetValues( "X-Ratelimit-Limit", out var headersLimit ) )
+    {
+      stravaApiUsages = headersUsage.First().Split( ',' );
+      stravaApiLimits = headersLimit.First().Split( ',' );
+
+      if ( int.Parse( stravaApiUsages[0] ) >= int.Parse( stravaApiLimits[0] ) )
+        throw new( $"! 15-minute Strava API limit {stravaApiLimits[0]} has been exhausted." );
+      if ( int.Parse( stravaApiUsages[1] ) >= int.Parse( stravaApiLimits[1] ) )
+        throw new( $"! Daily Strava API limit {stravaApiLimits[1]} has been exhausted." );
+    }
+  }
+}
+finally
+{
+  if ( stravaApiUsages != null && stravaApiLimits != null )
+    WriteLine( $"Strava API usage: 15-minute {stravaApiUsages[0]}/{stravaApiLimits[0]}, daily {stravaApiUsages[1]}/{stravaApiLimits[1]}" );
 }
 
 internal class Settings

@@ -26,6 +26,8 @@ Press [Create](https://developers.strava.com/images/getting-started-1.png) to re
 | GarminPassword | Garmin account password. |
 | UpdateName | true to update Strava activity name when the Garmin activity name is different. Otherwise false. |
 | UpdateDescription | true to update Strava activity description when the Garmin activity description is not empty and different. Otherwise false. |
+| PropertiesToDescription | true to append specified Garmin activity properties to the Strava activity description. Requires UpdateName = true. The value of this configuration item is the list of properties separated by semicolons. Optional formatting string follows the colon after the property name. Example: "VO2MaxValue;MaxHr;AvgStrideLength:0.0". See [List of Garmin activity properties]( https://github.com/sealbro/dotnet.garmin.connect/blob/main/Garmin.Connect/Models/GarminActivity.cs) and [Custom numeric format strings](https://docs.microsoft.com/en-us/dotnet/standard/base-types/custom-numeric-format-strings). |
+| GearsToDescription | true to append used gears to the description. Otherwise false. Requires UpdateName = true. |
 | UpdateWeight | true to update Strava athlete weight from Garmin. Otherwise false. |
 | DateAfter | Update activities that have taken place after a certain date. Example "2022-01-29". If this or the following property is missing in the configuration file today is used. |
 | DateBefore | Update activities that have taken place before a certain date. Example "2022-01-30". If this or the previous property is missing in the configuration file tomorrow is used. |

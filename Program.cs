@@ -5,7 +5,7 @@
  *    Nullable = Disable
  *    Implicit global usings = false
  * Installed Packages:
- *    Unofficial.Garmin.Connect
+ *    Unofficial.Garmin.Connect 0.2.0+
  *    Microsoft.Extensions.Configuration
  *    Microsoft.Extensions.Configuration.Json
  *    Microsoft.Extensions.Configuration.Binder
@@ -20,6 +20,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 
@@ -53,6 +54,16 @@ else
 }
 
 WriteLine( $"Time interval = {settings.DateAfter:yyyy-MM-dd} - {settings.DateBefore:yyyy-MM-dd}" );
+
+List<(string, string)> propertiesToDescription = new();
+foreach ( string propertyCfg in ( settings.PropertiesToDescription ?? "" ).Split( ';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries ) )
+{
+  int formatIndex = propertyCfg.IndexOf( ':' );
+  if ( formatIndex == -1 )
+    propertiesToDescription.Add( (propertyCfg, null) );
+  else
+    propertiesToDescription.Add( (propertyCfg[..formatIndex], propertyCfg[( formatIndex + 1 )..]) );
+}
 
 // ----------------------------- Authorize to Strava -----------------------------
 using HttpListener httpListener = new();
@@ -143,7 +154,7 @@ try
     checkStravaApiLimits();
 
     List<ExpandoObject> newActivities = ( await stravaResponse.Content.ReadAsStringAsync() ).JsonDeserializeList();
-    if ( newActivities.Count == 0 )
+    if ( !newActivities.Any() )
       break;
 
     foreach ( dynamic stravaActivity in newActivities )
@@ -199,8 +210,48 @@ try
         updateName = $"&name={garminActivityNameModified}";
 
       string updateDescription = "";
-      if ( settings.UpdateDescription && !string.IsNullOrEmpty( garminActivity.Description ) )
+      if ( settings.UpdateDescription && ( !string.IsNullOrEmpty( garminActivity.Description ) || settings.GearsToDescription || propertiesToDescription.Any() ) )
       {
+        StringBuilder garminActivityDescription = new( garminActivity.Description ?? "" );
+
+        if ( propertiesToDescription.Any() )
+        {
+          foreach ( (string propertyName, string propertyFormat) in propertiesToDescription )
+          {
+            PropertyInfo propertyInfo = garminActivity.GetType().GetProperty( propertyName );
+            if ( propertyInfo == null )
+              throw new( $"! Activity property '{propertyName}' does not exist!" );
+
+            object propertyValue = propertyInfo.GetValue( garminActivity );
+            if ( propertyValue != null && ( propertyValue.GetType().IsValueType
+                                            ? !propertyValue.Equals( Activator.CreateInstance( propertyValue.GetType() ) )
+                                            : propertyValue != null ) )
+              garminActivityDescription
+                .AppendLine()
+                .Append( $"{propertyName}=" )
+                .Append( propertyFormat == null
+                         ? propertyValue.ToString()
+                         : string.Format( $"{{0:{propertyFormat}}}", propertyValue ) );
+          }
+        }
+
+        if ( settings.GearsToDescription )
+        {
+          GarminGear[] gears = await client.GetActivityGears( garminActivity.ActivityId );
+          if ( gears.Length != 0 )
+          {
+            garminActivityDescription
+              .AppendLine()
+              .AppendLine()
+              .Append( "Gears:" );
+            foreach ( GarminGear gear in gears )
+              garminActivityDescription
+                .AppendLine()
+                .Append( "*  " )
+                .Append( gear.DisplayName );
+          }
+        }
+
         string getActivitysUrl = $"api/v3/activities/{stravaActivity.id}?" +
           $"access_token={stravaAccessToken}";
 
@@ -211,8 +262,8 @@ try
         checkStravaApiLimits();
 
         dynamic stravaActivityDetail = ( await stravaResponse.Content.ReadAsStringAsync() ).JsonDeserialize();
-        if ( string.Compare( garminActivity.Description, stravaActivityDetail.description ) != 0 )
-          updateDescription = $"&description={garminActivity.Description}";
+        if ( string.Compare( garminActivityDescription.ToString(), stravaActivityDetail.description ) != 0 )
+          updateDescription = $"&description={garminActivityDescription}";
       }
 
       if ( updateName != "" || updateDescription != "" )
@@ -267,29 +318,52 @@ internal class Settings
   /// Garmin account login email
   /// </summary>
   public string GarminLogin { get; set; }
+
   /// <summary>
   /// Garmin account password
   /// </summary>
   public string GarminPassword { get; set; }
+
   /// <summary>
   /// true to update Strava activity name when the Garmin activity name is different
   /// </summary>
   public bool UpdateName { get; set; }
+
   /// <summary>
   /// true to update Strava activity description when the Garmin activity description is not empty and different
+  /// if true than Strava activity description is also updated when <see cref="PropertiesToDescription"/> or <see cref="GearsToDescription"/> are set.
   /// </summary>
   public bool UpdateDescription { get; set; }
+
   /// <summary>
-  /// true to update Strava athlete weight from Garmin
+  /// true to append specified Garmin activity properties to the Strava activity description. Requires UpdateName = true.
+  /// The value of this configuration item is the list of properties separated by semicolons. Optional formatting string follows the colon after the property name.
+  /// Example: "VO2MaxValue;MaxHr;AvgStrideLength:0.0"
+  /// List of Garmin activity properties: https://github.com/sealbro/dotnet.garmin.connect/blob/main/Garmin.Connect/Models/GarminActivity.cs
+  /// Custom numeric format strings: https://docs.microsoft.com/en-us/dotnet/standard/base-types/custom-numeric-format-strings
+  /// </summary>
+  public string PropertiesToDescription { get; set; }
+
+  /// <summary>
+  /// true to append used gears to the description. Requires UpdateName = true.
+  /// </summary>
+  public bool GearsToDescription { get; set; }
+
+  /// <summary>
+  /// true to update Strava athlete weight from Garmin.
   /// </summary>
   public bool UpdateWeight { get; set; }
+
   /// <summary>
   /// Update activities that have taken place after a certain date.
   /// If this or the following property is missing in the configuration file today is used.
   /// </summary>
   public DateTime DateAfter { get; set; }
+
+  /// <summary>
   /// Update activities that have taken place before a certain date.
   /// If this or the previous property is missing in the configuration file tomorrow is used.
+  /// </summary>
   public DateTime DateBefore { get; set; }
 }
 

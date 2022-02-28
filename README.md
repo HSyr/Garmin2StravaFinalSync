@@ -1,6 +1,8 @@
 # Garmin2StravaFinalSync
 When the Strava account is connected to a Garmin account, new Garmin activities are automatically uploaded to the Strava. Unfortunately, the Strava does not upload the name and description of the Garmin activity.
 
+> :bulb: Try WEB version **ASync** at https://async.somee.com/Help.
+
 The single source file **Garmin2FoodFinalSync** Microsoft Windows console application updates the name and description from Garmin to Strava for all matching activities between the dates specified.
 
 **1.** Before you begin you must register your [Strava API Application](https://www.strava.com/settings/api) to obtain a Strava Client ID and a Strava Client Secret. This is a one-time manual step. When registering the application, enter the following fields:

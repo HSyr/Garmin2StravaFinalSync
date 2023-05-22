@@ -23,6 +23,7 @@ using System.Net.Http;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+using System.Web;
 
 using Garmin.Connect;
 using Garmin.Connect.Auth;
@@ -84,9 +85,7 @@ httpListener.Start();
 WriteLine( "Waiting for Strava authentication..." );
 
 HttpListenerContext context = httpListener.GetContext();
-string stravaCode = context.Request.QueryString["code"];
-if ( stravaCode == null )
-  throw new( "! Strava 'code' missing in the http redirect query." );
+string stravaCode = context.Request.QueryString["code"] ?? throw new( "! Strava 'code' missing in the http redirect query." );
 
 HttpListenerResponse response = context.Response;
 byte[] buffer = Encoding.UTF8.GetBytes( "<html><body><h1>Authorization successful!</h1></body></html>" );
@@ -201,13 +200,10 @@ try
     else
     {
       dynamic stravaActivity = foundGarminInStrava.First();
-      string stravaActivityNameTrim = stravaActivity.name.Trim();
-      // Note: other character replacements might be needed
-      string garminActivityNameModified = garminActivity.ActivityName.Trim().Replace( "#", "" ).Replace( '+', ' ' );
 
       string updateName = "";
-      if ( settings.UpdateName && garminActivityNameModified != stravaActivityNameTrim )
-        updateName = $"&name={garminActivityNameModified}";
+      if ( settings.UpdateName && garminActivity.ActivityName != stravaActivity.name )
+        updateName = $"&name={HttpUtility.UrlEncode( garminActivity.ActivityName )}";
 
       string updateDescription = "";
       if ( settings.UpdateDescription && ( !string.IsNullOrEmpty( garminActivity.Description ) || settings.GearsToDescription || propertiesToDescription.Any() ) )
@@ -218,10 +214,7 @@ try
         {
           foreach ( (string propertyName, string propertyFormat) in propertiesToDescription )
           {
-            PropertyInfo propertyInfo = garminActivity.GetType().GetProperty( propertyName );
-            if ( propertyInfo == null )
-              throw new( $"! Activity property '{propertyName}' does not exist!" );
-
+            PropertyInfo propertyInfo = garminActivity.GetType().GetProperty( propertyName ) ?? throw new( $"! Activity property '{propertyName}' does not exist!" );
             object propertyValue = propertyInfo.GetValue( garminActivity );
             if ( propertyValue != null && ( propertyValue.GetType().IsValueType
                                             ? !propertyValue.Equals( Activator.CreateInstance( propertyValue.GetType() ) )
@@ -263,7 +256,7 @@ try
 
         dynamic stravaActivityDetail = ( await stravaResponse.Content.ReadAsStringAsync() ).JsonDeserialize();
         if ( string.Compare( garminActivityDescription.ToString(), stravaActivityDetail.description ) != 0 )
-          updateDescription = $"&description={garminActivityDescription}";
+          updateDescription = $"&description={HttpUtility.UrlEncode( garminActivityDescription.ToString() )}";
       }
 
       if ( updateName != "" || updateDescription != "" )
